@@ -1,8 +1,176 @@
-l texto de la imagen usando etiquetas <p>, we:
-​<p>viajero.</p>
-<p>— ¡De eso nada! Ese privilegio me corresponde a mí – opinó el dueño subiendo el tono de voz.</p>
-<p>— ¡Yo lo he alquilado y tengo todo el derecho, que para eso te pagué cinco monedas de plata!</p>
-<p>— ¡Tú lo has dicho! Has alquilado el derecho a viajar en él pero no su sombra, así que como este animal es mío, soy yo quien se tumbará debajo de su tripa a descansar un rato.</p>
-<p>— ¡Maldita sea! ¡Yo alquilé el asno con sombra incluida!</p>
-<p>Los dos hombres se gritaban el uno al otro enfurecidos. Ninguno quería dar su brazo a torcer. De las palabras pasaron a los mamporros y empezaron a volar los puñetazos entre ellos.</p>
-<p>El asno, asustado por los golpes y los gritos, echó a correr sin que los hombres se</p
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Latinum Elite - Ultra Light</title>
+    <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
+    <style>
+        :root { --glow: #00f2fe; --dark: #0a0c10; --glass: rgba(255,255,255,0.05); }
+        
+        body { 
+            background: var(--dark); color: #fff; font-family: sans-serif; 
+            margin: 0; display: flex; flex-direction: column; align-items: center; padding: 15px;
+        }
+
+        /* --- UI RICA Y LIGERA --- */
+        .card { 
+            background: var(--glass); backdrop-filter: blur(10px);
+            border: 1px solid rgba(255,255,255,0.1); border-radius: 15px;
+            padding: 20px; width: 100%; max-width: 400px; margin-bottom: 15px;
+        }
+
+        .profile-header { display: flex; align-items: center; gap: 12px; margin-bottom: 15px; }
+        #pfp-preview { width: 50px; height: 50px; border-radius: 50%; border: 2px solid var(--glow); object-fit: cover; background: #222; }
+        
+        input, button { 
+            width: 100%; padding: 12px; margin-top: 8px; border-radius: 8px; 
+            border: 1px solid rgba(255,255,255,0.2); background: rgba(0,0,0,0.3); color: #fff; outline: none;
+            box-sizing: border-box;
+        }
+
+        button { 
+            background: linear-gradient(45deg, #00f2fe, #4facfe); color: #000; 
+            font-weight: bold; border: none; cursor: pointer;
+        }
+
+        .secondary { background: transparent; border: 1px solid var(--glow); color: var(--glow); }
+
+        #vid { width: 100%; border-radius: 10px; background: #000; display: block; }
+        
+        /* --- POSTS --- */
+        .post { 
+            background: rgba(255,255,255,0.03); border-left: 3px solid var(--glow);
+            padding: 12px; margin-top: 15px; border-radius: 0 10px 10px 0;
+            animation: slide 0.3s ease;
+        }
+        .post-info { display: flex; align-items: center; gap: 8px; font-size: 0.7rem; color: var(--glow); margin-bottom: 5px; }
+        .post-pfp { width: 20px; height: 20px; border-radius: 50%; }
+        .post-text { font-size: 0.85rem; max-height: 80px; overflow-y: auto; background: #000; padding: 5px; border-radius: 5px; }
+
+        @keyframes slide { from { opacity: 0; transform: translateX(-10px); } }
+        canvas, #file-pfp, #file-ocr { display: none; }
+    </style>
+</head>
+<body>
+
+    <div class="card">
+        <div class="profile-header">
+            <img id="pfp-preview" src="" onclick="document.getElementById('file-pfp').click()" title="Cambiar foto">
+            <div style="flex:1">
+                <input type="text" id="alias" placeholder="Tu Alias we..." onchange="saveProfile()">
+                <input type="text" id="room" placeholder="ID de sala (ej. 123)" style="font-size: 0.7rem; color: var(--glow)">
+            </div>
+        </div>
+        <input type="file" id="file-pfp" accept="image/*" onchange="updatePFP(this)">
+    </div>
+
+    <div class="card">
+        <video id="vid" autoplay playsinline></video>
+        <button onclick="scan('cam')">📸 CAPTURAR Y POSTEAR</button>
+        <button class="secondary" onclick="document.getElementById('file-ocr').click()">📁 SUBIR DE GALERÍA</button>
+        <input type="file" id="file-ocr" accept="image/*" onchange="scan('file', this)">
+        <div id="status" style="font-size: 0.7rem; text-align: center; margin-top: 10px; color: #888;">Listo we.</div>
+    </div>
+
+    <div id="feed" style="width: 100%; max-width: 400px;"></div>
+
+    <canvas id="canvas"></canvas>
+
+    <script>
+        const vid = document.getElementById('vid'), canvas = document.getElementById('canvas'), feed = document.getElementById('feed');
+        let user = { alias: "Anon", pfp: "", room: "123" };
+        let posts = [];
+
+        // Iniciar Datos y Cámara
+        window.onload = () => {
+            const saved = localStorage.getItem('ocr_profile_lite');
+            if(saved) {
+                user = JSON.parse(saved);
+                document.getElementById('alias').value = user.alias;
+                document.getElementById('room').value = user.room;
+                document.getElementById('pfp-preview').src = user.pfp || "https://via.placeholder.com/50";
+            }
+            navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } }).then(s => vid.srcObject = s);
+        };
+
+        function saveProfile() {
+            user.alias = document.getElementById('alias').value;
+            user.room = document.getElementById('room').value;
+            localStorage.setItem('ocr_profile_lite', JSON.stringify(user));
+        }
+
+        // Comprimir PFP para que no gaste memoria
+        function updatePFP(input) {
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                const img = new Image();
+                img.onload = () => {
+                    const ctx = canvas.getContext('2d');
+                    canvas.width = 60; canvas.height = 60; // Miniatura
+                    ctx.drawImage(img, 0, 0, 60, 60);
+                    user.pfp = canvas.toDataURL('image/jpeg', 0.7);
+                    document.getElementById('pfp-preview').src = user.pfp;
+                    saveProfile();
+                };
+                img.src = e.target.result;
+            };
+            reader.readAsDataURL(input.files[0]);
+        }
+
+        // OCR MASTER
+        async function scan(mode, input) {
+            document.getElementById('status').innerText = "PROCESANDO LATÍN...";
+            let src;
+            if(mode === 'cam') {
+                canvas.width = vid.videoWidth; canvas.height = vid.videoHeight;
+                canvas.getContext('2d').drawImage(vid, 0, 0);
+                src = canvas;
+            } else {
+                src = await new Promise(r => {
+                    const fr = new FileReader();
+                    fr.onload = (e) => r(e.target.result);
+                    fr.readAsDataURL(input.files[0]);
+                });
+            }
+
+            try {
+                const worker = await Tesseract.createWorker('lat');
+                const { data: { text } } = await worker.recognize(src);
+                await worker.terminate();
+
+                if(text.trim()) {
+                    addPost(text);
+                    document.getElementById('status').innerText = "¡POSTEADO!";
+                }
+            } catch(e) { document.getElementById('status').innerText = "Falló el OCR we."; }
+        }
+
+        function addPost(txt) {
+            const post = { id: Date.now(), alias: user.alias, pfp: user.pfp, body: txt };
+            posts.unshift(post);
+            if(posts.length > 3) posts.pop(); // Solo 3 al mismo tiempo
+            render();
+            // Aquí podrías añadir un fetch pequeñito a una API para sincronizar
+        }
+
+        function render() {
+            feed.innerHTML = posts.map(p => `
+                <div class="post">
+                    <div class="post-info">
+                        <img src="${p.pfp}" class="post-pfp">
+                        <b>${p.alias}</b>
+                    </div>
+                    <div class="post-text">${p.body}</div>
+                    <button class="secondary" style="padding: 5px; font-size: 0.7rem;" onclick="copy('${p.body.replace(/\n/g, ' ')}')">COPIAR TEXTO</button>
+                </div>
+            `).join('');
+        }
+
+        function copy(t) {
+            navigator.clipboard.writeText(t);
+            alert("Copiado we. Dale Ctrl+V en Word.");
+        }
+    </script>
+</body>
+</html>
