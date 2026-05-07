@@ -3,17 +3,17 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Info Truck - Elite</title>
+    <title>Info Truck - Elite V2</title>
     <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <style>
         :root { --neon: #00f2fe; --bg: #0a0c10; --card: rgba(255,255,255,0.05); }
         body { background: var(--bg); color: #fff; font-family: system-ui, sans-serif; margin: 0; overflow-x: hidden; }
         .container { display: flex; flex-direction: column; align-items: center; padding: 20px; min-height: 100vh; }
-        .card { background: var(--card); border: 1px solid rgba(255,255,255,0.1); border-radius: 20px; padding: 20px; width: 100%; max-width: 450px; backdrop-filter: blur(10px); box-sizing: border-box; }
-        video { width: 100%; border-radius: 15px; background: #000; margin-bottom: 10px; border: 1px solid #333; }
-        button { background: linear-gradient(45deg, #00f2fe, #4facfe); border: none; padding: 15px; border-radius: 12px; font-weight: bold; cursor: pointer; width: 100%; margin-top: 10px; color: #000; }
-        .secondary { background: transparent; border: 1px solid var(--neon); color: var(--neon); font-size: 0.8rem; padding: 10px; }
+        .card { background: var(--card); border: 1px solid rgba(255,255,255,0.1); border-radius: 20px; padding: 20px; width: 100%; max-width: 450px; backdrop-filter: blur(10px); box-sizing: border-box; text-align: center; }
+        video, #preview { width: 100%; border-radius: 15px; background: #000; margin-bottom: 10px; border: 1px solid #333; display: block; }
+        button { background: linear-gradient(45deg, #00f2fe, #4facfe); border: none; padding: 15px; border-radius: 12px; font-weight: bold; cursor: pointer; width: 100%; margin-top: 10px; color: #000; font-size: 1rem; }
+        .btn-sec { background: transparent; border: 1px solid var(--neon); color: var(--neon); margin-top: 8px; }
         .post { background: rgba(255,255,255,0.03); border-left: 4px solid var(--neon); padding: 15px; border-radius: 10px; margin-top: 15px; text-align: left; width: 100%; box-sizing: border-box; }
         .hidden { display: none !important; }
         .nav-pfp { position: absolute; top: 15px; right: 15px; width: 40px; height: 40px; border-radius: 50%; border: 2px solid var(--neon); cursor: pointer; }
@@ -24,17 +24,23 @@
     <div id="view-scanner" class="container hidden">
         <img id="nav-pfp" class="nav-pfp" src="https://www.gravatar.com/avatar/0?d=mp" onclick="setProfile()">
         <div class="card">
-            <h2 style="color:var(--neon); margin:0 0 15px 0; font-size: 1.2rem;">SCANNER MODE</h2>
+            <h2 style="color:var(--neon); margin:0 0 15px 0;">INFO TRUCK ELITE</h2>
             <video id="vid" autoplay playsinline></video>
-            <button id="btn-scan" onclick="doOCR()">📸 ESCANEAR Y ENVIAR</button>
-            <p id="st" style="font-size: 0.7rem; color: #888; text-align: center; margin-top: 15px;">Listo para el jale, we.</p>
+            <canvas id="canvas-proc" class="hidden"></canvas>
+            
+            <button id="btn-scan" onclick="processSource('camera')">📸 ESCANEAR EN VIVO</button>
+            
+            <input type="file" id="fileInput" accept="image/*" class="hidden" onchange="processSource('file')">
+            <button class="btn-sec" onclick="document.getElementById('fileInput').click()">📁 SUBIR DE GALERÍA</button>
+            
+            <p id="st" style="font-size: 0.8rem; color: #888; margin-top: 15px;">Listo para el jale, we.</p>
         </div>
     </div>
 
     <div id="view-pc" class="container hidden">
         <div class="card" style="max-width: 600px;">
-            <h2 style="color:var(--neon); margin-top:0;">INFO TRUCK: RECEPCIÓN</h2>
-            <div id="feed"><p style="color: #444; text-align: center;">Esperando señales...</p></div>
+            <h2 style="color:var(--neon); margin-top:0;">RECEPCIÓN DE DATOS</h2>
+            <div id="feed"><p style="color: #444;">Esperando señales...</p></div>
         </div>
     </div>
 
@@ -60,48 +66,72 @@
             try {
                 const s = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
                 document.getElementById('vid').srcObject = s;
-            } catch (e) { alert("Activa la cámara, we."); }
+            } catch (e) { alert("Ocupas activar la cámara, we."); }
         }
 
-        async function doOCR() {
-            const st = document.getElementById('st');
-            const btn = document.getElementById('btn-scan');
-            const vid = document.getElementById('vid');
+        // --- MAGIA DEL FILTRO B&W ---
+        function filterImage(source) {
+            const canvas = document.getElementById('canvas-proc');
+            const ctx = canvas.getContext('2d');
             
-            st.innerText = "⚡ PROCESANDO...";
-            btn.disabled = true;
+            // Ajustar tamaño del canvas al origen (video o imagen)
+            canvas.width = source.videoWidth || source.width;
+            canvas.height = source.videoHeight || source.height;
+            
+            ctx.drawImage(source, 0, 0);
+            const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+            const d = imgData.data;
 
-            const canvas = document.createElement('canvas');
-            canvas.width = vid.videoWidth; canvas.height = vid.videoHeight;
-            canvas.getContext('2d').drawImage(vid, 0, 0);
+            for (let i = 0; i < d.length; i += 4) {
+                const avg = (d[i] + d[i+1] + d[i+2]) / 3;
+                // UMBRAL: Si es más oscuro que 128, negro. Si no, blanco total.
+                const v = avg < 128 ? 0 : 255;
+                d[i] = d[i+1] = d[i+2] = v;
+            }
+            ctx.putImageData(imgData, 0, 0);
+            return canvas.toDataURL('image/jpeg', 0.9);
+        }
 
+        async function processSource(type) {
+            const st = document.getElementById('st');
+            st.innerText = "⚡ PROCESANDO IMAGEN...";
+            
+            let dataUrl;
+            if (type === 'camera') {
+                dataUrl = filterImage(document.getElementById('vid'));
+            } else {
+                const file = document.getElementById('fileInput').files[0];
+                const img = new Image();
+                img.src = URL.createObjectURL(file);
+                await img.decode();
+                dataUrl = filterImage(img);
+            }
+
+            st.innerText = "🔍 LEYENDO TEXTO...";
             try {
-                const { data: { text } } = await Tesseract.recognize(canvas, 'lat');
-                
+                const { data: { text } } = await Tesseract.recognize(dataUrl, 'lat');
                 if (text.trim()) {
-                    st.innerText = "📤 ENVIANDO...";
-                    
-                    // TODO CON MAYÚSCULA INICIAL PARA QUE SUPABASE NO CHILLE
-                    const { error } = await _supabase.from('POSTS').insert([
-                        { 
-                            Alias: user.alias, 
-                            Pfp: user.pfp, 
-                            Body: text 
-                        }
-                    ]);
-
-                    if (error) throw error;
-                    
-                    st.innerText = "✅ ¡ENVIADO!";
-                    setTimeout(() => st.innerText = "Listo, we.", 2000);
+                    await sendToSupabase(text);
                 } else {
-                    st.innerText = "❌ No vi nada de texto.";
+                    st.innerText = "❌ No encontré texto claro.";
                 }
-            } catch (err) {
-                alert("Error real de Supabase: " + err.message);
-                st.innerText = "⚠️ Falló.";
-            } finally {
-                btn.disabled = false;
+            } catch (e) {
+                st.innerText = "⚠️ Error: " + e.message;
+            }
+        }
+
+        async function sendToSupabase(txt) {
+            const st = document.getElementById('st');
+            st.innerText = "📤 ENVIANDO A LA PC...";
+            const { error } = await _supabase.from('POSTS').insert([
+                { Alias: user.alias, Pfp: user.pfp, Body: txt }
+            ]);
+            if (error) {
+                st.innerText = "❌ Falló el envío.";
+                console.error(error);
+            } else {
+                st.innerText = "✅ ¡ENVIADO CON ÉXITO!";
+                setTimeout(() => st.innerText = "Listo para otro, we.", 3000);
             }
         }
 
@@ -116,7 +146,7 @@
                             <b style="color:var(--neon)">${p.Alias}</b>
                         </div>
                         <div style="background:#000; padding:12px; border-radius:8px; font-size:0.9rem; white-space:pre-wrap;">${p.Body}</div>
-                        <button class="secondary" style="width:auto; margin-top:10px;" onclick="copyTxt('${p.Body.replace(/\n/g, ' ')}')">COPIAR</button>
+                        <button class="btn-sec" style="width:auto; padding:5px 15px;" onclick="copyTxt('${p.Body.replace(/\n/g, ' ')}')">COPIAR</button>
                     </div>
                 `;
                 const feed = document.getElementById('feed');
@@ -127,11 +157,11 @@
 
         function copyTxt(t) {
             navigator.clipboard.writeText(t);
-            alert("Copiado, we.");
+            alert("Copiado al portapapeles, we.");
         }
 
         function setProfile() {
-            const a = prompt("Tu alias:", user.alias);
+            const a = prompt("Tu nombre/apodo:", user.alias);
             if(a) { 
                 user.alias = a; 
                 localStorage.setItem('it_user', JSON.stringify(user));
