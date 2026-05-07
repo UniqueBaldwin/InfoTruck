@@ -3,173 +3,139 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Latinum Elite - Ultra Light</title>
+    <title>Info truck</title>
     <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <style>
-        :root { --glow: #00f2fe; --dark: #0a0c10; --glass: rgba(255,255,255,0.05); }
-        
-        body { 
-            background: var(--dark); color: #fff; font-family: sans-serif; 
-            margin: 0; display: flex; flex-direction: column; align-items: center; padding: 15px;
-        }
-
-        /* --- UI RICA Y LIGERA --- */
-        .card { 
-            background: var(--glass); backdrop-filter: blur(10px);
-            border: 1px solid rgba(255,255,255,0.1); border-radius: 15px;
-            padding: 20px; width: 100%; max-width: 400px; margin-bottom: 15px;
-        }
-
-        .profile-header { display: flex; align-items: center; gap: 12px; margin-bottom: 15px; }
-        #pfp-preview { width: 50px; height: 50px; border-radius: 50%; border: 2px solid var(--glow); object-fit: cover; background: #222; }
-        
-        input, button { 
-            width: 100%; padding: 12px; margin-top: 8px; border-radius: 8px; 
-            border: 1px solid rgba(255,255,255,0.2); background: rgba(0,0,0,0.3); color: #fff; outline: none;
-            box-sizing: border-box;
-        }
-
-        button { 
-            background: linear-gradient(45deg, #00f2fe, #4facfe); color: #000; 
-            font-weight: bold; border: none; cursor: pointer;
-        }
-
-        .secondary { background: transparent; border: 1px solid var(--glow); color: var(--glow); }
-
-        #vid { width: 100%; border-radius: 10px; background: #000; display: block; }
-        
-        /* --- POSTS --- */
-        .post { 
-            background: rgba(255,255,255,0.03); border-left: 3px solid var(--glow);
-            padding: 12px; margin-top: 15px; border-radius: 0 10px 10px 0;
-            animation: slide 0.3s ease;
-        }
-        .post-info { display: flex; align-items: center; gap: 8px; font-size: 0.7rem; color: var(--glow); margin-bottom: 5px; }
-        .post-pfp { width: 20px; height: 20px; border-radius: 50%; }
-        .post-text { font-size: 0.85rem; max-height: 80px; overflow-y: auto; background: #000; padding: 5px; border-radius: 5px; }
-
-        @keyframes slide { from { opacity: 0; transform: translateX(-10px); } }
-        canvas, #file-pfp, #file-ocr { display: none; }
+        :root { --neon: #00f2fe; --bg: #0a0c10; --card: rgba(255,255,255,0.05); }
+        body { background: var(--bg); color: #fff; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; margin: 0; overflow-x: hidden; }
+        .container { display: flex; flex-direction: column; align-items: center; padding: 20px; min-height: 100vh; }
+        .card { background: var(--card); border: 1px solid rgba(255,255,255,0.1); border-radius: 20px; padding: 20px; width: 100%; max-width: 450px; backdrop-filter: blur(10px); box-sizing: border-box; box-shadow: 0 10px 30px rgba(0,0,0,0.5); }
+        video { width: 100%; border-radius: 15px; background: #000; margin-bottom: 10px; border: 1px solid #333; }
+        button { background: linear-gradient(45deg, #00f2fe, #4facfe); border: none; padding: 15px; border-radius: 12px; font-weight: bold; cursor: pointer; width: 100%; margin-top: 10px; color: #000; transition: 0.3s; }
+        button:active { transform: scale(0.98); }
+        .secondary { background: transparent; border: 1px solid var(--neon); color: var(--neon); }
+        .post { background: rgba(255,255,255,0.03); border-left: 4px solid var(--neon); padding: 15px; border-radius: 10px; margin-top: 15px; text-align: left; width: 100%; box-sizing: border-box; animation: slideIn 0.3s ease; }
+        .hidden { display: none !important; }
+        .nav-pfp { position: absolute; top: 15px; right: 15px; width: 40px; height: 40px; border-radius: 50%; border: 2px solid var(--neon); cursor: pointer; background: #222; }
+        @keyframes slideIn { from { opacity: 0; transform: translateX(-10px); } to { opacity: 1; transform: translateX(0); } }
     </style>
 </head>
 <body>
 
-    <div class="card">
-        <div class="profile-header">
-            <img id="pfp-preview" src="" onclick="document.getElementById('file-pfp').click()" title="Cambiar foto">
-            <div style="flex:1">
-                <input type="text" id="alias" placeholder="Tu Alias we..." onchange="saveProfile()">
-                <input type="text" id="room" placeholder="ID de sala (ej. 123)" style="font-size: 0.7rem; color: var(--glow)">
+    <div id="view-scanner" class="container hidden">
+        <img id="nav-pfp" class="nav-pfp" src="https://via.placeholder.com/40" onclick="setProfile()">
+        <div class="card">
+            <h2 style="color:var(--neon); margin-top:0; font-size: 1.2rem;">SCANNER MODE</h2>
+            <video id="vid" autoplay playsinline></video>
+            <button onclick="doOCR()">📸 ESCANEAR Y ENVIAR</button>
+            <p id="st" style="font-size: 0.7rem; color: #888; text-align: center; margin-top: 15px;">Sistema listo, we.</p>
+        </div>
+    </div>
+
+    <div id="view-pc" class="container hidden">
+        <div class="card" style="max-width: 600px;">
+            <h2 style="color:var(--neon); margin-top:0; font-size: 1.2rem;">INFO TRUCK RECEPCIÓN</h2>
+            <div id="feed">
+                <p style="color: #666; text-align: center;">Esperando señales del cel...</p>
             </div>
         </div>
-        <input type="file" id="file-pfp" accept="image/*" onchange="updatePFP(this)">
     </div>
-
-    <div class="card">
-        <video id="vid" autoplay playsinline></video>
-        <button onclick="scan('cam')">📸 CAPTURAR Y POSTEAR</button>
-        <button class="secondary" onclick="document.getElementById('file-ocr').click()">📁 SUBIR DE GALERÍA</button>
-        <input type="file" id="file-ocr" accept="image/*" onchange="scan('file', this)">
-        <div id="status" style="font-size: 0.7rem; text-align: center; margin-top: 10px; color: #888;">Listo we.</div>
-    </div>
-
-    <div id="feed" style="width: 100%; max-width: 400px;"></div>
-
-    <canvas id="canvas"></canvas>
 
     <script>
-        const vid = document.getElementById('vid'), canvas = document.getElementById('canvas'), feed = document.getElementById('feed');
-        let user = { alias: "Anon", pfp: "", room: "123" };
-        let posts = [];
+        // --- PEGA TUS LLAVES AQUÍ WE ---
+        const SB_URL = 'https://dopmsepmgmcncpymkeey.supabase.co';
+        const SB_KEY = 'sb_publishable_DQuJP12R60iDQCFtyW8xNQ_2i3HLC5x';
+        
+        // Inicializar Supabase
+        const _supabase = supabase.createClient(SB_URL, SB_KEY);
 
-        // Iniciar Datos y Cámara
-        window.onload = () => {
-            const saved = localStorage.getItem('ocr_profile_lite');
-            if(saved) {
-                user = JSON.parse(saved);
-                document.getElementById('alias').value = user.alias;
-                document.getElementById('room').value = user.room;
-                document.getElementById('pfp-preview').src = user.pfp || "https://via.placeholder.com/50";
-            }
-            navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } }).then(s => vid.srcObject = s);
-        };
+        const urlParams = new URLSearchParams(window.location.search);
+        const isPC = urlParams.get('mode') === 'pc';
+        let user = JSON.parse(localStorage.getItem('it_user') || '{"alias":"Anon","pfp":"https://www.gravatar.com/avatar/0?d=mp"}');
 
-        function saveProfile() {
-            user.alias = document.getElementById('alias').value;
-            user.room = document.getElementById('room').value;
-            localStorage.setItem('ocr_profile_lite', JSON.stringify(user));
+        // Lógica de inicio
+        if (isPC) {
+            document.getElementById('view-pc').classList.remove('hidden');
+            initRealtime();
+        } else {
+            document.getElementById('view-scanner').classList.remove('hidden');
+            document.getElementById('nav-pfp').src = user.pfp;
+            startCamera();
         }
 
-        // Comprimir PFP para que no gaste memoria
-        function updatePFP(input) {
-            const reader = new FileReader();
-            reader.onload = (e) => {
-                const img = new Image();
-                img.onload = () => {
-                    const ctx = canvas.getContext('2d');
-                    canvas.width = 60; canvas.height = 60; // Miniatura
-                    ctx.drawImage(img, 0, 0, 60, 60);
-                    user.pfp = canvas.toDataURL('image/jpeg', 0.7);
-                    document.getElementById('pfp-preview').src = user.pfp;
-                    saveProfile();
-                };
-                img.src = e.target.result;
-            };
-            reader.readAsDataURL(input.files[0]);
+        async function startCamera() {
+            try {
+                const s = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
+                document.getElementById('vid').srcObject = s;
+            } catch (e) {
+                alert("Oye we, activa el permiso de la cámara o usa HTTPS.");
+            }
         }
 
-        // OCR MASTER
-        async function scan(mode, input) {
-            document.getElementById('status').innerText = "PROCESANDO LATÍN...";
-            let src;
-            if(mode === 'cam') {
-                canvas.width = vid.videoWidth; canvas.height = vid.videoHeight;
-                canvas.getContext('2d').drawImage(vid, 0, 0);
-                src = canvas;
-            } else {
-                src = await new Promise(r => {
-                    const fr = new FileReader();
-                    fr.onload = (e) => r(e.target.result);
-                    fr.readAsDataURL(input.files[0]);
-                });
-            }
+        async function doOCR() {
+            const st = document.getElementById('st');
+            const vid = document.getElementById('vid');
+            st.innerText = "⚡ PROCESANDO IMAGEN...";
+            
+            const canvas = document.createElement('canvas');
+            canvas.width = vid.videoWidth; canvas.height = vid.videoHeight;
+            canvas.getContext('2d').drawImage(vid, 0, 0);
 
             try {
-                const worker = await Tesseract.createWorker('lat');
-                const { data: { text } } = await worker.recognize(src);
-                await worker.terminate();
-
+                const { data: { text } } = await Tesseract.recognize(canvas, 'lat');
+                
                 if(text.trim()) {
-                    addPost(text);
-                    document.getElementById('status').innerText = "¡POSTEADO!";
+                    st.innerText = "📤 SUBIENDO A LA NUBE...";
+                    const { error } = await _supabase.from('POSTS').insert([
+                        { Alias: user.alias, Pfp: user.pfp, Body: text }
+                    ]);
+                    
+                    if(error) throw error;
+                    st.innerText = "✅ ¡ENVIADO CON ÉXITO!";
+                    setTimeout(() => st.innerText = "Listo para el siguiente.", 2000);
+                } else {
+                    st.innerText = "❌ No detecté texto, we.";
                 }
-            } catch(e) { document.getElementById('status').innerText = "Falló el OCR we."; }
+            } catch (err) {
+                console.error(err);
+                st.innerText = "⚠️ Falló el envío.";
+            }
         }
 
-        function addPost(txt) {
-            const post = { id: Date.now(), alias: user.alias, pfp: user.pfp, body: txt };
-            posts.unshift(post);
-            if(posts.length > 3) posts.pop(); // Solo 3 al mismo tiempo
-            render();
-            // Aquí podrías añadir un fetch pequeñito a una API para sincronizar
-        }
-
-        function render() {
-            feed.innerHTML = posts.map(p => `
-                <div class="post">
-                    <div class="post-info">
-                        <img src="${p.pfp}" class="post-pfp">
-                        <b>${p.alias}</b>
+        function initRealtime() {
+            _supabase.channel('posts-live')
+            .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'POSTS' }, payload => {
+                const p = payload.new;
+                const html = `
+                    <div class="post">
+                        <div style="display:flex; align-items:center; gap:10px; margin-bottom:10px;">
+                            <img src="${p.Pfp}" style="width:25px; height:25px; border-radius:50%; border: 1px solid var(--neon);">
+                            <b style="color:var(--neon)">${p.Alias}</b>
+                            <span style="font-size:0.6rem; color:#444;">${new Date().toLocaleTimeString()}</span>
+                        </div>
+                        <div style="background:rgba(0,0,0,0.4); padding:12px; border-radius:8px; font-size:0.95rem; white-space: pre-wrap;">${p.Body}</div>
+                        <button class="secondary" style="padding:8px; font-size:0.7rem; margin-top:10px;" onclick="copyTxt('${p.Body.replace(/\n/g, ' ')}')">COPIAR PARA WORD</button>
                     </div>
-                    <div class="post-text">${p.body}</div>
-                    <button class="secondary" style="padding: 5px; font-size: 0.7rem;" onclick="copy('${p.body.replace(/\n/g, ' ')}')">COPIAR TEXTO</button>
-                </div>
-            `).join('');
+                `;
+                const feed = document.getElementById('feed');
+                if(feed.innerHTML.includes("Esperando")) feed.innerHTML = "";
+                feed.innerHTML = html + feed.innerHTML;
+            }).subscribe();
         }
 
-        function copy(t) {
+        function copyTxt(t) {
             navigator.clipboard.writeText(t);
-            alert("Copiado we. Dale Ctrl+V en Word.");
+            alert("¡Copiado, we! Ya puedes pegarlo.");
+        }
+
+        function setProfile() {
+            const a = prompt("Ponte un alias mamalón:", user.alias);
+            if(a) { 
+                user.alias = a; 
+                localStorage.setItem('it_user', JSON.stringify(user));
+                location.reload();
+            }
         }
     </script>
 </body>
