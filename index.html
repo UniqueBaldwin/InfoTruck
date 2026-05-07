@@ -3,15 +3,14 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Info Truck - Elite V2</title>
-    <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
+    <title>Info Truck - Elite V3</title>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <style>
         :root { --neon: #00f2fe; --bg: #0a0c10; --card: rgba(255,255,255,0.05); }
         body { background: var(--bg); color: #fff; font-family: system-ui, sans-serif; margin: 0; overflow-x: hidden; }
         .container { display: flex; flex-direction: column; align-items: center; padding: 20px; min-height: 100vh; }
         .card { background: var(--card); border: 1px solid rgba(255,255,255,0.1); border-radius: 20px; padding: 20px; width: 100%; max-width: 450px; backdrop-filter: blur(10px); box-sizing: border-box; text-align: center; }
-        video, #preview { width: 100%; border-radius: 15px; background: #000; margin-bottom: 10px; border: 1px solid #333; display: block; }
+        video { width: 100%; border-radius: 15px; background: #000; margin-bottom: 10px; border: 1px solid #333; }
         button { background: linear-gradient(45deg, #00f2fe, #4facfe); border: none; padding: 15px; border-radius: 12px; font-weight: bold; cursor: pointer; width: 100%; margin-top: 10px; color: #000; font-size: 1rem; }
         .btn-sec { background: transparent; border: 1px solid var(--neon); color: var(--neon); margin-top: 8px; }
         .post { background: rgba(255,255,255,0.03); border-left: 4px solid var(--neon); padding: 15px; border-radius: 10px; margin-top: 15px; text-align: left; width: 100%; box-sizing: border-box; }
@@ -28,25 +27,26 @@
             <video id="vid" autoplay playsinline></video>
             <canvas id="canvas-proc" class="hidden"></canvas>
             
-            <button id="btn-scan" onclick="processSource('camera')">📸 ESCANEAR EN VIVO</button>
+            <button onclick="processSource('camera')">📸 ESCANEAR EN VIVO</button>
             
             <input type="file" id="fileInput" accept="image/*" class="hidden" onchange="processSource('file')">
             <button class="btn-sec" onclick="document.getElementById('fileInput').click()">📁 SUBIR DE GALERÍA</button>
             
-            <p id="st" style="font-size: 0.8rem; color: #888; margin-top: 15px;">Listo para el jale, we.</p>
+            <p id="st" style="font-size: 0.8rem; color: #888; margin-top: 15px;">Listo con OCR.space, we.</p>
         </div>
     </div>
 
     <div id="view-pc" class="container hidden">
         <div class="card" style="max-width: 600px;">
-            <h2 style="color:var(--neon); margin-top:0;">RECEPCIÓN DE DATOS</h2>
-            <div id="feed"><p style="color: #444;">Esperando señales...</p></div>
+            <h2 style="color:var(--neon); margin-top:0;">RECEPCIÓN</h2>
+            <div id="feed"><p style="color: #444;">Esperando...</p></div>
         </div>
     </div>
 
     <script>
         const SB_URL = 'https://dopmsepmgmcncpymkeey.supabase.co';
         const SB_KEY = 'sb_publishable_DQuJP12R60iDQCFtyW8xNQ_2i3HLC5x';
+        const OCR_KEY = 'K85992362288957'; 
         const _supabase = supabase.createClient(SB_URL, SB_KEY);
 
         const urlParams = new URLSearchParams(window.location.search);
@@ -66,72 +66,73 @@
             try {
                 const s = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
                 document.getElementById('vid').srcObject = s;
-            } catch (e) { alert("Ocupas activar la cámara, we."); }
+            } catch (e) { alert("Activa la cámara."); }
         }
 
-        // --- MAGIA DEL FILTRO B&W ---
-        function filterImage(source) {
+        function getProcessedDataUrl(source) {
             const canvas = document.getElementById('canvas-proc');
             const ctx = canvas.getContext('2d');
-            
-            // Ajustar tamaño del canvas al origen (video o imagen)
             canvas.width = source.videoWidth || source.width;
             canvas.height = source.videoHeight || source.height;
-            
             ctx.drawImage(source, 0, 0);
-            const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-            const d = imgData.data;
-
-            for (let i = 0; i < d.length; i += 4) {
-                const avg = (d[i] + d[i+1] + d[i+2]) / 3;
-                // UMBRAL: Si es más oscuro que 128, negro. Si no, blanco total.
-                const v = avg < 128 ? 0 : 255;
-                d[i] = d[i+1] = d[i+2] = v;
-            }
-            ctx.putImageData(imgData, 0, 0);
-            return canvas.toDataURL('image/jpeg', 0.9);
+            return canvas.toDataURL('image/jpeg', 0.8);
         }
 
         async function processSource(type) {
             const st = document.getElementById('st');
-            st.innerText = "⚡ PROCESANDO IMAGEN...";
+            st.innerText = "⚡ PROCESANDO...";
             
             let dataUrl;
             if (type === 'camera') {
-                dataUrl = filterImage(document.getElementById('vid'));
+                dataUrl = getProcessedDataUrl(document.getElementById('vid'));
             } else {
                 const file = document.getElementById('fileInput').files[0];
                 const img = new Image();
                 img.src = URL.createObjectURL(file);
                 await img.decode();
-                dataUrl = filterImage(img);
+                dataUrl = getProcessedDataUrl(img);
             }
 
-            st.innerText = "🔍 LEYENDO TEXTO...";
+            st.innerText = "📡 USANDO IA...";
+            
             try {
-                const { data: { text } } = await Tesseract.recognize(dataUrl, 'lat');
-                if (text.trim()) {
-                    await sendToSupabase(text);
+                const fd = new FormData();
+                fd.append('base64Image', dataUrl);
+                fd.append('apikey', OCR_KEY);
+                fd.append('language', 'spa');
+                fd.append('isTable', 'true'); // Ayuda a que entienda mejor el orden de las letras
+
+                const resp = await fetch('https://api.ocr.space/parse/image', {
+                    method: 'POST',
+                    body: fd
+                });
+
+                const res = await resp.json();
+
+                if (res.OCRExitCode === 1) {
+                    const txt = res.ParsedResults[0].ParsedText;
+                    if (txt.trim()) {
+                        await sendToSupabase(txt);
+                    } else {
+                        st.innerText = "❌ No se detectó texto.";
+                    }
                 } else {
-                    st.innerText = "❌ No encontré texto claro.";
+                    st.innerText = "⚠️ Error: " + res.ErrorMessage;
                 }
             } catch (e) {
-                st.innerText = "⚠️ Error: " + e.message;
+                st.innerText = "⚠️ Error de red.";
             }
         }
 
         async function sendToSupabase(txt) {
             const st = document.getElementById('st');
-            st.innerText = "📤 ENVIANDO A LA PC...";
             const { error } = await _supabase.from('POSTS').insert([
                 { Alias: user.alias, Pfp: user.pfp, Body: txt }
             ]);
-            if (error) {
-                st.innerText = "❌ Falló el envío.";
-                console.error(error);
-            } else {
-                st.innerText = "✅ ¡ENVIADO CON ÉXITO!";
-                setTimeout(() => st.innerText = "Listo para otro, we.", 3000);
+            if (error) st.innerText = "❌ Error Supabase.";
+            else {
+                st.innerText = "✅ ¡ENVIADO!";
+                setTimeout(() => st.innerText = "Listo, we.", 2000);
             }
         }
 
@@ -146,7 +147,7 @@
                             <b style="color:var(--neon)">${p.Alias}</b>
                         </div>
                         <div style="background:#000; padding:12px; border-radius:8px; font-size:0.9rem; white-space:pre-wrap;">${p.Body}</div>
-                        <button class="btn-sec" style="width:auto; padding:5px 15px;" onclick="copyTxt('${p.Body.replace(/\n/g, ' ')}')">COPIAR</button>
+                        <button class="btn-sec" style="width:auto; padding:5px 15px;" onclick="copyTxt(\`${p.Body.replace(/`/g, "'")}\`)">COPIAR</button>
                     </div>
                 `;
                 const feed = document.getElementById('feed');
@@ -157,11 +158,11 @@
 
         function copyTxt(t) {
             navigator.clipboard.writeText(t);
-            alert("Copiado al portapapeles, we.");
+            alert("Copiado, we.");
         }
 
         function setProfile() {
-            const a = prompt("Tu nombre/apodo:", user.alias);
+            const a = prompt("Apodo:", user.alias);
             if(a) { 
                 user.alias = a; 
                 localStorage.setItem('it_user', JSON.stringify(user));
